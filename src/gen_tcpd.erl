@@ -130,7 +130,7 @@
 	code_change/3,
 	terminate/2
 ]).
--export([init_acceptor/5]).
+-export([init_acceptor/4]).
 
 -type socket() :: gen_tcp:socket().
 -type ip_address() :: inet:ip_address().
@@ -295,14 +295,13 @@ setopts(Socket, Options) ->
 -spec init([any()]) ->
 	{ok, #state{}} | {stop, #state{}}.
 init([Mod, Args, Port, Options]) ->
-	Acceptors = proplists:get_value(acceptors, Options, 1),
-	Timeout = proplists:get_value(ssl_accept_timeout, Options, infinity),
-	SocketOptions = proplists:get_value(socket_options, Options, []),
+	Acceptors = maps:get(acceptors, Options, 1),
+	SocketOptions = maps:get(socket_options, Options, []),
 	case Mod:init(Args) of
 		{ok, CState} ->
 			case listen(Port, SocketOptions) of
 				{ok, Socket} ->
-					start_acceptors(Acceptors, Mod, CState, Socket, Timeout),
+					start_acceptors(Acceptors, Mod, CState, Socket),
 					{ok, #state{
 						callback = {Mod, CState},
 						socket = Socket
@@ -360,33 +359,33 @@ code_change(_, _, State) ->
 	{ok, State}.
 
 %% @private
-start_acceptors(0, _, _, _, _) ->
+start_acceptors(0, _, _, _) ->
 	ok;
-start_acceptors(Acceptors, Callback, CState, Socket, SSLTimeout) ->
-	Args = [self(), Callback, CState, Socket, SSLTimeout],
+start_acceptors(Acceptors, Callback, CState, Socket) ->
+	Args = [self(), Callback, CState, Socket],
 	proc_lib:spawn(?MODULE, init_acceptor, Args),
-	start_acceptors(Acceptors - 1, Callback, CState, Socket, SSLTimeout).
+	start_acceptors(Acceptors - 1, Callback, CState, Socket).
 
 %% @hidden
--spec init_acceptor(pid(), atom(), term(), any(), timeout()) -> _.
-init_acceptor(Parent, Callback, CState, Socket, SSLTimeout) ->
+-spec init_acceptor(pid(), atom(), term(), any()) -> _.
+init_acceptor(Parent, Callback, CState, Socket) ->
 	try link(Parent)
 		catch error:noproc -> exit(normal)
 	end,
 	put('$ancestors', tl(get('$ancestors'))),
-	accept(Parent, Callback, CState, Socket, SSLTimeout).
+	accept(Parent, Callback, CState, Socket).
 
-accept(Parent, Callback, CState, Socket, SSLTimeout) ->
-	case do_accept(Socket, SSLTimeout) of
+accept(Parent, Callback, CState, Socket) ->
+	case gen_tcp:accept(Socket) of
 		{ok, Client} ->
-			Args = [Parent, Callback, CState, Socket, SSLTimeout],
+			Args = [Parent, Callback, CState, Socket],
 			proc_lib:spawn(?MODULE, init_acceptor, Args),
 			Callback:handle_connection(Client, CState);
-		{error, {{ssl, ssl_accept}, timeout}} -> % SSL negotiation timed out
-			accept(Parent, Callback, CState, Socket, SSLTimeout);
 		{error, {_, closed}} ->
 			unlink(Parent), % no need to send exit signals here
 			exit(normal);
+		{error, Reason} ->
+            erlang:error({error, {{gen_tcp, accept}, Reason}});
 		Other ->
 			erlang:error(Other)
 	end.
@@ -397,12 +396,6 @@ listen(Port, Options) ->
 		{error, Reason} -> {error, {{gen_tcp, listen}, Reason}}
 	end.
 
-do_accept(Socket, _) ->
-	case gen_tcp:accept(Socket) of
-		{ok, Client}    -> {ok, Client};
-		{error, Reason} -> {error, {{gen_tcp, accept}, Reason}}
-	end.
-
 sock_port(Socket) ->
 	element(2, inet:port(Socket)).
 
@@ -410,7 +403,7 @@ check_options(Opts) when is_map(Opts) ->
     SockOpts = maps:get(socket_options, Opts, []),
     Acceptors = maps:get(acceptors, Opts, 1),
     if
-        is_list(SockOpts) and is_integer(Acceptors) and Acceptors > 0 ->
+        is_list(SockOpts) and is_integer(Acceptors) and (Acceptors > 0) ->
             ok;
         true ->
             erlang:error({bad_option, Opts})
