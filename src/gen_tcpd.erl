@@ -131,6 +131,7 @@
 	terminate/2
 ]).
 -export([init_acceptor/4]).
+-optional_callbacks([]).
 
 -type socket() :: gen_tcp:socket().
 -type ip_address() :: inet:ip_address().
