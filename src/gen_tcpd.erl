@@ -131,10 +131,17 @@
 	terminate/2
 ]).
 -export([init_acceptor/5]).
--export([behaviour_info/1]).
 
 -type socket() :: gen_tcp:socket().
 -type ip_address() :: inet:ip_address().
+-type reason() :: term().
+-type cstate() :: term().
+
+-callback init(term()) -> {ok, cstate()} | {stop, reason()}.
+-callback terminate(reason(), cstate()) -> any().
+-callback handle_info(term(), cstate()) -> noreply | {stop, reason()}.
+-callback handle_connection(socket(), cstate()) -> any().
+
 -record(state, {callback    :: {atom(), term()},
                 socket      :: undefined | socket()}).
 
@@ -410,9 +417,3 @@ check_options(Opts) when is_map(Opts) ->
 check_options(Opts) ->
     erlang:error({bad_option, Opts}).
 
-%% @hidden
--spec behaviour_info(any()) -> [{atom(), non_neg_integer()}] | ok.
-behaviour_info(callbacks) ->
-	[{init, 1}, {handle_connection, 2}, {handle_info, 2}, {terminate, 2}];
-behaviour_info(_) ->
-	ok.
