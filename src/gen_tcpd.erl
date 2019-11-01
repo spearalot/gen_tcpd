@@ -134,6 +134,7 @@
 
 -type socket() :: gen_tcp:socket().
 -type ip_address() :: inet:ip_address().
+-type args() :: term().
 -type reason() :: term().
 -type cstate() :: term().
 
@@ -146,8 +147,8 @@
                 socket      :: undefined | socket()}).
 
 %% @spec start_link(Callback, CallbackArg, Port, Options) -> {ok, Pid}
-%% Callback = atom()
-%% CallbackArg = term()
+%% Callback = module()
+%% CallbackArg = args()
 %% Port = integer()
 %% Options = #{socket_options => SocketOptions, acceptors => Acceptors}
 %%  
@@ -157,7 +158,7 @@
 %% Pid = pid()
 %% @doc Starts a gen_tcpd process and links to it.
 %% @end
--spec start_link(atom(), term(), 0..65535, map()) ->
+-spec start_link(module(), args(), 0..65535, map()) ->
 	{ok, pid()} | {error, term()} | ignore.
 start_link(Callback, CallbackArg, Port, Options) ->
 	Args = [Callback, CallbackArg, Port, Options],
@@ -168,8 +169,8 @@ start_link(Callback, CallbackArg, Port, Options) ->
 %% ServerName = {local, Name} | {global, GlobalName}
 %% Name = atom()
 %% GlobalName = term()
-%% Callback = atom()
-%% CallbackArg = term()
+%% Callback = module()
+%% CallbackArg = args()
 %% Port = integer()
 %% Options = #{socket_options => SocketOptions, acceptors => Acceptors}
 %% SocketOptions = [SocketOpt]
@@ -178,7 +179,7 @@ start_link(Callback, CallbackArg, Port, Options) ->
 %% Pid = pid()
 %% @doc Starts a gen_tcpd process, links to it and register its name.
 %% @end
--spec start_link({local, atom()} | {global, term()}, atom(), term(), 0..65535, map()) ->
+-spec start_link({local, atom()} | {global, term()}, module(), args(), 0..65535, map()) ->
 	{ok, pid()} | {error, term()} | ignore.
 start_link(ServerName, Callback, CallbackArg, Port, Options) ->
 	Args = [Callback, CallbackArg, Port, Options],
