@@ -131,7 +131,7 @@
 	terminate/2
 ]).
 -export([init_acceptor/4]).
--optional_callbacks([]).
+
 
 -type socket() :: gen_tcp:socket().
 -type ip_address() :: inet:ip_address().
@@ -143,6 +143,7 @@
 -callback terminate(reason(), cstate()) -> any().
 -callback handle_info(term(), cstate()) -> noreply | {stop, reason()}.
 -callback handle_connection(socket(), cstate()) -> any().
+-optional_callbacks([terminate/2, handle_info/2]).
 
 -record(state, {callback    :: {atom(), term()},
                 socket      :: undefined | socket()}).
@@ -311,7 +312,7 @@ init([Mod, Args, Port, Options]) ->
 					{stop, Reason}
 			end;
 		{stop, Reason} ->
-			Mod:terminate(Reason, undefined),
+			try_dispatch(Mod, terminate, Reason, undefined),
 			{stop, Reason};
 		Other ->
 			{stop, {invalid_return_value, Other}}
@@ -338,7 +339,7 @@ handle_cast(_, State) ->
 	{noreply, #state{}} | {stop, any(), #state{}}.
 handle_info(Info, State) ->
 	{CMod, CState} = State#state.callback,
-	case CMod:handle_info(Info, CState) of
+	case try_dispatch(CMod, handle_info, Info, CState) of
 		noreply ->
 			{noreply, State};
 		{stop, Reason} ->
@@ -351,7 +352,7 @@ handle_info(Info, State) ->
 -spec terminate(any(), #state{}) -> any().
 terminate(Reason, #state{callback = {CMod, CState}} = State) ->
 	_ = close(State#state.socket),
-	CMod:terminate(Reason, CState).
+	try_dispatch(CMod, terminate, Reason, CState).
 
 %% @hidden
 -spec code_change(any(), any(), #state{}) ->
@@ -412,3 +413,13 @@ check_options(Opts) when is_map(Opts) ->
 check_options(Opts) ->
     erlang:error({bad_option, Opts}).
 
+try_dispatch(Mod, Func, Arg, State) ->
+    try
+        Mod:Func(Arg, State)
+    catch
+        error:undef = R:Stacktrace ->
+            case erlang:function_exported(Mod, Func, 2) of
+                false -> noreply;
+                true -> erlang:raise(error, R, Stacktrace)
+            end
+    end.
