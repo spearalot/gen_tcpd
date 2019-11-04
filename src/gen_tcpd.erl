@@ -141,7 +141,7 @@
 
 -callback init(term()) -> {ok, cstate()} | {stop, reason()}.
 -callback terminate(reason(), cstate()) -> any().
--callback handle_info(term(), cstate()) -> noreply | {stop, reason()}.
+-callback handle_info(term(), cstate()) -> {ok, term()} | {stop, reason()}.
 -callback handle_connection(socket(), cstate()) -> any().
 -optional_callbacks([terminate/2, handle_info/2]).
 
@@ -340,8 +340,8 @@ handle_cast(_, State) ->
 handle_info(Info, State) ->
 	{CMod, CState} = State#state.callback,
 	case try_dispatch(CMod, handle_info, Info, CState) of
-		noreply ->
-			{noreply, State};
+		{ok, CStatep} ->
+			{noreply, State#state{callback = {CMod, CStatep}}};
 		{stop, Reason} ->
 			{stop, Reason, State};
 		Other ->
@@ -419,7 +419,7 @@ try_dispatch(Mod, Func, Arg, State) ->
     catch
         error:undef = R:Stacktrace ->
             case erlang:function_exported(Mod, Func, 2) of
-                false -> noreply;
+                false -> {noreply, State};
                 true -> erlang:raise(error, R, Stacktrace)
             end
     end.
